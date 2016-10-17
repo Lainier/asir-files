@@ -105,7 +105,6 @@ iptables -A INPUT -i $idmz -d 172.20.103.254 -p udp --sport 53 -s 172.20.103.22 
 
 # Acceso desde wan al servidor DNS
 iptables -t nat -A PREROUTING -i $iwan -d 10.3.4.138 -p udp --dport 53 -j DNAT --to 172.20.103.22
-iptables -A FORWARD -s $ip_wan -d 172.20.103.22 -p udp --dport 53 -j ACCEPT
 
 }
 
