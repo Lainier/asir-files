@@ -69,6 +69,13 @@ iptables -A FORWARD -d $ip_lan -s $ip_dmz -p udp --sport 53 -j ACCEPT
 iptables -A FORWARD -d $ip_dmz -p tcp --dport 80 -j ACCEPT
 iptables -A FORWARD -s $ip_dmz -p tcp --sport 80 -j ACCEPT
 
+#Acceso desde el Firewall a servidores web en la WAN
+
+iptables -A OUTPUT -o $iwan -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --sport 80 -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -o $iwan -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --sport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
+
 #acceso desde la dmz a servidor web en la wan
 
 iptables -A FORWARD -i $idmz -s $ip_dmz -o $iwan -p tcp --dport 80 -j ACCEPT
