@@ -76,11 +76,6 @@ iptables -A INPUT -p tcp --sport 80 -m state --state ESTABLISHED,RELATED -j ACCE
 iptables -A OUTPUT -o $iwan -p tcp --dport 443 -j ACCEPT
 iptables -A INPUT -p tcp --sport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-#acceso desde la dmz a servidor web en la wan
-
-iptables -A FORWARD -i $idmz -s $ip_dmz -o $iwan -p tcp --dport 80 -j ACCEPT
-iptables -A FORWARD -i $iwan -d $ip_dmz -o $idmz -p tcp --sport 80 -j ACCEPT
-
 #https a la dmz
 iptables -A FORWARD -d $ip_dmz -p tcp --dport 443 -j ACCEPT
 iptables -A FORWARD -s $ip_dmz -p tcp --sport 443 -j ACCEPT
@@ -94,8 +89,10 @@ iptables -A FORWARD -p icmp -j ACCEPT
 
 iptables -t nat -A PREROUTING -i $iwan -p tcp --dport 80 -j DNAT --to 172.20.103.22
 
-# salida a repositorios de servidores de la dmz
+#Acceso desde la dmz a servidores web en la wan
 
+iptables -A FORWARD -i $idmz -s $ip_dmz -o $iwan -p tcp --dport 80 -j ACCEPT
+iptables -A FORWARD -o $idmz -d $ip_dmz -i $iwan -p tcp --sport 80 -j ACCEPT
 iptables -t nat -A POSTROUTING -s $ip_dmz -o $iwan -p tcp --dport 80 -j SNAT --to 10.3.4.138
 
 #ssh a la dmz
