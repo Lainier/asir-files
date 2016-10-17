@@ -80,7 +80,7 @@ iptables -A FORWARD -s $ip_dmz -p tcp --sport 443 -j ACCEPT
 
 #ping
 iptables -A OUTPUT -p icmp -j ACCEPT
-iptables -A INPUT -p icmp -j ACCEPT
+iptables -A INPUT -p icmp -m state --state ESTABLISHED,RELATED -j ACCEPT
 iptables -A FORWARD -p icmp -j ACCEPT
 
 # Acceso desde la WAN al servidor web
@@ -98,11 +98,13 @@ iptables -t nat -A PREROUTING -i $iwan -d 10.3.4.138 -p tcp --dport 2222 -j DNAT
 # Acceso desde Firewall al servidor DNS
 
 iptables -A OUTPUT -o $idmz -s 172.20.103.254 -p udp --dport 53 -d 172.20.103.22 -j ACCEPT
-iptables -A INPUT -i $idmz -d 172.20.103.254 -p udp --sport 53 -s 172.20.103.22 -j ACCEPT
 
 #  Acceso desde Firewall al servidor DNS en la WAN
 iptables -A OUTPUT -d $ip_wan -p udp --dport 53 -j ACCEPT
-iptables -A INPUT -s $ip_wan -p udp --sport 53 -j ACCEPT
+
+# Respuesta de los DNS
+iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED,RELATED -j ACCEPT
+
 
 }
 
