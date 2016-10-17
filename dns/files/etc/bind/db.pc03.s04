@@ -1,0 +1,17 @@
+$ORIGIN pc03.s04.
+
+$TTL    604800
+
+@       IN      SOA     sri-server.pc03.s04. admin.pc03.s04. (
+                        2016091101      ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@              IN      NS      sri-server
+sri-server     IN      A       172.20.103.22
+@              IN      MX      10 sri-server
+sad-server     IN      A       172.20.103.254
+sri            IN      CNAME   sri-server
+fw             IN      CNAME   sad-server

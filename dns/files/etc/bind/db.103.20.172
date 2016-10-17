@@ -1,0 +1,17 @@
+;
+; BIND reverse data file for DMZ
+;
+
+$ORIGIN 103.20.172.in-addr.arpa
+
+$TTL	604800
+@	IN	SOA	sri-server.s03.s04. admin.pc03.s04. (
+			      1		; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+@	IN	NS	sri-server.p03.s04
+22	IN	PTR	sri-server.p03.s04
+254     IN      PTR     sad-server.p03.s04
