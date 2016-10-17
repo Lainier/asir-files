@@ -31,18 +31,15 @@ iptables -P INPUT DROP
 iptables -P OUTPUT DROP
 iptables -P FORWARD DROP
 
-cho 1 > /proc/sys/net/ipv4/ip_forward
-
 # Reglas de acceso SSH
 #LAN
 iptables -A INPUT -s $ip_lan -i $ilan -p tcp --dport 2222 -j ACCEPT
-iptables -A OUTPUT -d $ip_lan -o $ilan -p tcp --sport 2222 -j ACCEPT
 #WAN
 iptables -A INPUT -s $ip_wan -i $iwan -p tcp --dport 2222 -j ACCEPT
-iptables -A OUTPUT -d $ip_wan -o $iwan -p tcp --sport 2222 -j ACCEPT
 #DMZ 
 iptables -A INPUT -s $ip_dmz -i $idmz -p tcp --dport 2222 -j ACCEPT
-iptables -A OUTPUT -d $ip_dmz -o $idmz -p tcp --sport 2222 -j ACCEPT
+#Respuesta
+iptables -A OUTPUT -p tcp --sport 2222 -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 # Reglas del servicio DHCPD
 
