@@ -31,19 +31,18 @@ iptables -P INPUT DROP
 iptables -P OUTPUT DROP
 iptables -P FORWARD DROP
 
-#Reglas input
+cho 1 > /proc/sys/net/ipv4/ip_forward
 
 # Reglas de acceso SSH
 #LAN
-iptables -A INPUT -d $ip_lan -i $ilan -p tcp --dport 2222 -j ACCEPT
-iptables -A OUTPUT -s $ip_lan -o $ilan -p tcp --sport 2222 -j ACCEPT
+iptables -A INPUT -s $ip_lan -i $ilan -p tcp --dport 2222 -j ACCEPT
+iptables -A OUTPUT -d $ip_lan -o $ilan -p tcp --sport 2222 -j ACCEPT
 #WAN
-iptables -A INPUT -d $ip_wan -i $iwan -p tcp --dport 2222 -j ACCEPT
-iptables -A OUTPUT -s $ip_wan -o $iwan -p tcp --sport 2222 -j ACCEPT
+iptables -A INPUT -s $ip_wan -i $iwan -p tcp --dport 2222 -j ACCEPT
+iptables -A OUTPUT -d $ip_wan -o $iwan -p tcp --sport 2222 -j ACCEPT
 #DMZ 
-iptables -A INPUT -d $ip_dmz -i $idmz -p tcp --dport 2222 -j ACCEPT
-iptables -A OUTPUT -s $ip_dmz -o $idmz -p tcp --sport 2222 -j ACCEPT
-cho 1 > /proc/sys/net/ipv4/ip_forward
+iptables -A INPUT -s $ip_dmz -i $idmz -p tcp --dport 2222 -j ACCEPT
+iptables -A OUTPUT -d $ip_dmz -o $idmz -p tcp --sport 2222 -j ACCEPT
 
 # Reglas del servicio DHCPD
 
@@ -105,8 +104,8 @@ iptables -A OUTPUT -o $idmz -s 172.20.103.254 -p udp --dport 53 -d 172.20.103.22
 iptables -A INPUT -i $idmz -d 172.20.103.254 -p udp --sport 53 -s 172.20.103.22 -j ACCEPT
 
 # Acceso desde wan al servidor DNS
-iptables -A OUTPUT -o $iwan -s 10.3.4.138 -p udp --sport 53 -j ACCEPT
-iptables -A INPUT -i $iwan -d 10.3.4.138 -p udp --dport 53 -j ACCEPT
+iptables -t nat -A PREROUTING -i $iwan -d 10.3.4.138 -p udp --dport 53 -j DNAT --to 172.20.103.22
+iptables -A FORWARD -s $ip_wan -d 172.20.103.22 -p udp --dport 53 -j ACCEPT
 
 }
 
