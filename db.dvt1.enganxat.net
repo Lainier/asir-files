@@ -1,0 +1,14 @@
+$ORIGIN dvt1.enganxat.net.
+
+$TTL    604800
+
+@       IN      SOA     ngxt.enganxat.net. admin.enganxat.net. (
+                              1         ; Serial
+                            120         ; Refresh
+                             60         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@                     IN      NS      ngxt.enganxat.net.
+ngxt.enganxat.net.    IN      A       5.135.3.76
+www                   IN      A       dadnos_una_ip
