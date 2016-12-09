@@ -1,150 +1,178 @@
 #!/bin/sh
 
-# Alejandro García, Jorge Jiménez, Javier Selva
-
-# Script de reglas personales de iptables.
-#Variables ip
-ip_lan='192.168.103.0/24'
-ip_wan='10.3.4.0/24'
-ip_dmz='172.20.103.0/24'
-
-# Variables interface
-ilan='ens9'
-iwan='ens7'
-idmz='ens3'
-
-# función para inicializar el FW.
-
-inicia() {
-
-#activar enrutado
-
-echo 1 > /proc/sys/net/ipv4/ip_forward
-
-#Borrar las reglas iptables existentes
-
-iptables -F
-
-#Reglas por defecto
-
-iptables -P INPUT DROP
-iptables -P OUTPUT DROP
-iptables -P FORWARD DROP
-
-# Reglas de acceso SSH
-#LAN
-iptables -A INPUT -s $ip_lan -i $ilan -p tcp --dport 2222 -j ACCEPT
-#WAN
-iptables -A INPUT -s $ip_wan -i $iwan -p tcp --dport 2222 -j ACCEPT
-#DMZ 
-iptables -A INPUT -s $ip_dmz -i $idmz -p tcp --dport 2222 -j ACCEPT
-#Respuesta
-iptables -A OUTPUT -p tcp --sport 2222 -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-# Reglas del servicio DHCPD
-
-iptables -A INPUT -i $ilan -p udp --dport 68 --sport 67 -j ACCEPT
-iptables -A OUTPUT -o $ilan -p udp --sport 67 --dport 68 -j ACCEPT
-
-iptables -A INPUT -i $idmz -p udp --dport 68 --sport 67 -j ACCEPT
-iptables -A OUTPUT -o $idmz -p udp --sport 67 --dport 68 -j ACCEPT
-
-
-# Reglas del cliente DHCP
-iptables -A OUTPUT -o $iwan -p udp --dport 67 --sport 68 -j ACCEPT
-iptables -A INPUT -i $iwan -p udp --sport 68 --dport 67 -j ACCEPT
-
-#ssh de la lan a la dmz
-
-iptables -A FORWARD -s $ip_lan -d $ip_dmz -p tcp --dport 22 -j ACCEPT
-iptables -A FORWARD -d $ip_lan -s $ip_dmz -p tcp --sport 22 -j ACCEPT
-
-#dns lan a la dmz
-
-iptables -A FORWARD -s $ip_lan -d $ip_dmz -p udp --dport 53 -j ACCEPT
-iptables -A FORWARD -d $ip_lan -s $ip_dmz -p udp --sport 53 -j ACCEPT
-
-#http a la dmz
-
-iptables -A FORWARD -d $ip_dmz -p tcp --dport 80 -j ACCEPT
-iptables -A FORWARD -s $ip_dmz -p tcp --sport 80 -j ACCEPT
-
-#Acceso desde el Firewall a servidores web en la WAN
-
-iptables -A OUTPUT -o $iwan -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -p tcp --sport 80 -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -A OUTPUT -o $iwan -p tcp --dport 443 -j ACCEPT
-iptables -A INPUT -p tcp --sport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-#https a la dmz
-iptables -A FORWARD -d $ip_dmz -p tcp --dport 443 -j ACCEPT
-iptables -A FORWARD -s $ip_dmz -p tcp --sport 443 -j ACCEPT
-
-#ping
-iptables -A OUTPUT -p icmp -j ACCEPT
-iptables -A INPUT -p icmp -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -A FORWARD -p icmp -j ACCEPT
-
-# Acceso desde la WAN al servidor web
-
-iptables -t nat -A PREROUTING -i $iwan -p tcp --dport 80 -j DNAT --to 172.20.103.22
-
-#Acceso desde la dmz a servidores web en la wan
-
-iptables -A FORWARD -i $idmz -s $ip_dmz -o $iwan -p tcp --dport 80 -j ACCEPT
-iptables -A FORWARD -o $idmz -d $ip_dmz -i $iwan -p tcp --sport 80 -j ACCEPT
-iptables -t nat -A POSTROUTING -s $ip_dmz -o $iwan -p tcp --dport 80 -j SNAT --to 10.3.4.138
-
-#ssh a la dmz
-
-iptables -t nat -A PREROUTING -i $iwan -d 10.3.4.138 -p tcp --dport 2222 -j DNAT --to 172.20.103.22
-
-# Acceso desde Firewall al servidor DNS
-
-iptables -A OUTPUT -o $idmz -s 172.20.103.254 -p udp --dport 53 -d 172.20.103.22 -j ACCEPT
-
-#  Acceso desde Firewall al servidor DNS en la WAN
-iptables -A OUTPUT -d $ip_wan -p udp --dport 53 -j ACCEPT
-
-# Respuesta de los DNS
-iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-
-}
-
-#función para parar el FW
-
-para() {
-
-# Limpieza tabla
-iptables -F
-
-# Reglas generales
-
-iptables -P INPUT ACCEPT
-iptables -P OUTPUT ACCEPT
-iptables -P FORWARD ACCEPT
-
-}
-
-
-# Operación principal del script
-# Para comprobar que eres root averiguamos si el id es 0
-# [ $(id -u) -eq 0 ]
-
-# Comprobamos los parámetros y seleccionamos la opción correcta.
-
-
-if [ $# -ne 1 ]
-        then
-                echo "Número de parámetros incorrectos. Escriba start o stop"
-                exit 23
+if [ $# -ne 1 ]; then
+	echo "You must supply one parameter {start|stop|restart}"
+	exit 1
 fi
 
-case $1 in
-        'start') inicia;;
-        'stop') para;;
-        *) echo "parámetro incorrecto";exit 24;;
-esac
+# VARS
+DMZ_NET="172.20.103.0/24"
+LAN_NET="192.168.103.0/24"
 
+DMZ_IF="ens3"
+WAN_IF="ens7"
+LAN_IF="ens9"
+
+DMZ_IP="172.20.103.254"
+WAN_IP="10.3.4.77"
+LAN_IP="192.168.103.254"
+
+CFG_FILE="/etc/default/fw-rules"
+
+if [ -r "$CFG_FILE" ] ; then
+	. $CFG_FILE
+fi
+
+STATUS_FILE="/var/run/fw-rules"
+
+case $1 in
+"start")
+
+	# Remove rules
+	$0 stop
+	
+	#enable routing
+	echo "1" > /proc/sys/net/ipv4/ip_forward
+	
+	# Default policies
+	iptables -P INPUT DROP
+	iptables -P OUTPUT DROP
+	iptables -P FORWARD DROP
+
+# servicios en el FireWall
+	# SSH desde REDES a FW (rules 1,2,3)
+	iptables -A INPUT -i $WAN_IF -d $WAN_IP -p tcp --dport 2222 -j ACCEPT
+	iptables -A INPUT -i $LAN_IF -s $LAN_NET -d $LAN_IP -p tcp --dport 2222 -j ACCEPT
+	iptables -A INPUT -i $DMZ_IF -s $DMZ_NET -d $DMZ_IP  -p tcp --dport 2222 -j ACCEPT
+
+# seguimiento de conexiones para las respuestas
+	iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+        iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# FireWall como cliente
+	# cliente DHCP
+	iptables -A OUTPUT -o $WAN_IF -p udp --dport 67 --sport 68 -j ACCEPT
+#	iptables -A INPUT -i $WAN_IF -p udp --sport 67 --dport 68 -m state --state ESTABLISHED,RELATED -j ACCEPT
+#>	iptables -A INPUT -i $WAN_IF -p udp --sport 67 --dport 68 -j ACCEPT
+
+	# cliente PING (icmp)
+	iptables -A OUTPUT -p icmp -j ACCEPT
+#	iptables -A INPUT -p icmp -m state --state ESTABLISHED,RELATED -j ACCEPT
+#>	iptables -A INPUT -p icmp -j ACCEPT
+
+	# Cliente DNS
+	iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+        iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+#	iptables -A INPUT -p udp --sport 53  -m state --state ESTABLISHED,RELATED -j ACCEPT
+#>	iptables -A INPUT -p udp --sport 53 -j ACCEPT
+
+	# Cliente HTTP
+	iptables -A OUTPUT -p tcp --dport 80 -j ACCEPT
+#	iptables -A INPUT -p tcp --sport 80  -m state --state ESTABLISHED,RELATED -j ACCEPT
+#>	iptables -A INPUT -i $WAN_IF -p tcp --sport 80 -j ACCEPT
+
+	# Cliente HTTPS
+	iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
+#	iptables -A INPUT -p tcp --sport 443  -m state --state ESTABLISHED,RELATED -j ACCEPT
+#>	iptables -A INPUT -i $WAN_IF -p tcp --sport 443 -j ACCEPT
+	
+	# Cliente SSH
+	iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
+#	iptables -A INPUT -p tcp --sport 22  -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Firewall como router
+	#Clientes DNS desde la DMZ a la WAN
+	iptables -A FORWARD -i $DMZ_IF -s $DMZ_NET -o $WAN_IF -p udp --dport 53 -j ACCEPT
+	iptables -t nat -A POSTROUTING -s $DMZ_NET -o $WAN_IF -p udp --dport 53 -j SNAT --to $WAN_IP
+        #Clientes DNS desde la DMZ a la WAN
+        iptables -A FORWARD -i $DMZ_IF -s $DMZ_NET -o $WAN_IF -p tcp --dport 53 -j ACCEPT
+        iptables -t nat -A POSTROUTING -s $DMZ_NET -o $WAN_IF -p tcp --dport 53 -j SNAT --to $WAN_IP
+
+        #Clienres DNS desde la LAN a la WAN
+        iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $WAN_IF -p udp --dport 53 -j ACCEPT
+        iptables -t nat -A POSTROUTING -s $LAN_NET -o $WAN_IF -p udp --dport 53 -j SNAT --to $WAN_IP
+
+        #Acceso de servidores esclavos DNS en la WAN al servidor maestro DNS en la DMZ
+        iptables -A FORWARD -i $WAN_IF -o $DMZ_IF -d $DMZ_NET -p tcp --dport 53 -j ACCEPT
+        iptables -A FORWARD -i $WAN_IF -o $DMZ_IF -d $DMZ_NET -p udp --dport 53 -j ACCEPT
+        iptables -t nat -A PREROUTING -i $WAN_IF -p tcp --dport 53 -j DNAT --to 172.20.103.22
+        iptables -t nat -A PREROUTING -i $WAN_IF -p udp --dport 53 -j DNAT --to 172.20.103.22
+
+	# Salida a Repositorios de Servidores de la DMZ (7)
+	iptables -A FORWARD -i $DMZ_IF -s $DMZ_NET -o $WAN_IF -p tcp --dport 80 -j ACCEPT
+#	iptables -A FORWARD -o $DMZ_IF -d $DMZ_NET -i $WAN_IF -p tcp --sport 80 -j ACCEPT
+	iptables -t nat -A POSTROUTING -s $DMZ_NET -o $WAN_IF -p tcp --dport 80 -j SNAT --to $WAN_IP
+
+	# Salida a Repositorios https (github) desde la DMZ (7)
+	iptables -A FORWARD -i $DMZ_IF -s $DMZ_NET -o $WAN_IF -p tcp --dport 443 -j ACCEPT
+#	iptables -A FORWARD -o $DMZ_IF -d $DMZ_NET -i $WAN_IF -p tcp --sport 80 -j ACCEPT
+	iptables -t nat -A POSTROUTING -s $DMZ_NET -o $WAN_IF -p tcp --dport 443 -j SNAT --to $WAN_IP
+
+	# SSH desde LAN a los servidores DMZ (8)
+	iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $DMZ_IF -d $DMZ_NET -p tcp --dport 22 -j ACCEPT
+#	iptables -A FORWARD -o $LAN_IF -d $LAN_NET -i $DMZ_IF -s $DMZ_NET -p tcp --sport 22 -j ACCEPT
+
+	# cliente DNS desde LAN a servidor DNS en la DMZ
+	iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $DMZ_IF -d $DMZ_NET -p udp --dport 53 -j ACCEPT
+#	iptables -A FORWARD -o $LAN_IF -d $LAN_NET -i $DMZ_IF -s $DMZ_NET -p tcp --sport 53 -j ACCEPT
+
+	# HTTP desde LAN a servidor DMZ
+	iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $DMZ_IF -d $DMZ_NET -p tcp --dport 80 -j ACCEPT
+#	iptables -A FORWARD -o $LAN_IF -d $LAN_NET -i $DMZ_IF -s $DMZ_NET -p tcp --sport 80 -j ACCEPT
+
+	# HTTPS desde LAN a servidor DMZ
+	iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $DMZ_IF -d $DMZ_NET -p tcp --dport 443 -j ACCEPT
+#	iptables -A FORWARD -o $LAN_IF -d $LAN_NET -i $DMZ_IF -s $DMZ_NET -p tcp --sport 443 -j ACCEPT
+
+	# Navegacion WEB desde LAN a INTERNET (WAN)
+	#iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $WAN_IF -p tcp --dport 80 -j ACCEPT
+#	iptables -A FORWARD -o $LAN_IF -d $LAN_NET -i $WAN_IF -p tcp --sport 80 -j ACCEPT
+	#iptables -t nat -A POSTROUTING -s $LAN_NET -o $WAN_IF -p tcp --dport 80 -j SNAT --to $WAN_IP
+
+	#iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $WAN_IF -p tcp --dport 443 -j ACCEPT
+#	iptables -A FORWARD -o $LAN_IF -d $LAN_NET -i $WAN_IF -p tcp --sport 443 -j ACCEPT
+	#iptables -t nat -A POSTROUTING -s $LAN_NET -o $WAN_IF -p tcp --dport 443 -j SNAT --to $WAN_IP
+
+	# PING ICMP
+#	iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $DMZ_IF -d $DMZ_NET -p icmp -j ACCEPT
+#	iptables -A FORWARD -i $DMZ_IF -s $DMZ_NET -o $LAN_IF -d $LAN_IF -p icmp -j ACCEPT
+	iptables -A FORWARD -p icmp -j ACCEPT
+	iptables -t nat -A POSTROUTING -o $WAN_IF -p icmp  -j SNAT --to $WAN_IP
+
+        #Acceso desde la LAN al proxy en la DMZ
+        iptables -A FORWARD -i $LAN_IF -s $LAN_NET -o $DMZ_IF -p tcp --dport 3128 -j ACCEPT        
+
+	# Se permiten el FORWARD de todas las respuestas a peticiones hechas
+ 	iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+	echo "fw-rules service started" > $STATUS_FILE
+	;;
+
+"stop")
+	rm -f "$STATUS_FILE"
+	iptables -F
+	iptables -t nat -F
+	iptables -P INPUT ACCEPT
+	iptables -P OUTPUT ACCEPT
+	iptables -P FORWARD ACCEPT
+
+	#disable routing
+	echo "0" > /proc/sys/net/ipv4/ip_forward
+	;;
+"restart")
+	$0 stop
+	$0 start
+	;;
+"status")
+	if [ -r "$STATUS_FILE" ]; then
+		cat "$STATUS_FILE"
+	else
+		echo "fw-rules service stopped"
+	fi
+	;;
+*)
+	echo "Se necesita un parametro válido [start | stop]"
+	exit 1
+	;;
+esac
 exit 0
